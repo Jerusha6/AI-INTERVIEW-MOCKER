@@ -10,7 +10,7 @@ function Header() {
   return (
     <div className="flex p-4 items-centre justify-between bg-secondary shadow-sm">
       <Image src={"/logo.svg"} width={160} height={100} alt="logo" />
-      <ul className="flex gap-6">
+      <ul className="hidden md:flex gap-6">
         <li
           className={`hover:text-[#0A717C] hover:font-bold transition-all cursor-pointer 
             ${path == "/dashboard" && "text-[#0A717C] font-bold"}
@@ -20,21 +20,21 @@ function Header() {
         </li>
         <li
           className={`hover:text-[#0A717C] hover:font-bold transition-all cursor-pointer 
-            ${path == "/questions" && "text-[#0A717C] font-bold"}
+            ${path == "/dashboard/questions" && "text-[#0A717C] font-bold"}
             `}
         >
           Questions
         </li>
         <li
           className={`hover:text-[#0A717C] hover:font-bold transition-all cursor-pointer 
-            ${path == "/upgrade" && "text-[#0A717C] font-bold"}
+            ${path == "/dashboard/upgrade" && "text-[#0A717C] font-bold"}
             `}
         >
           Upgrade
         </li>
         <li
           className={`hover:text-[#0A717C] hover:font-bold transition-all cursor-pointer 
-            ${path == "/working" && "text-[#0A717C] font-bold"}
+            ${path == "/dashboard/working" && "text-[#0A717C] font-bold"}
             `}
         >
           How it works?
