@@ -13,86 +13,113 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { chatSession } from "@/utils/GeminiAIModel";
 import { LoaderCircle } from "lucide-react";
+import { db } from "@/utils/db";
+import { MockInterview } from "@/utils/schema";
+import { v4 as uuidv4 } from "uuid";
+import { useUser } from "@clerk/nextjs";
+import moment from "moment";
 
 function AddNewInterview() {
   const [openDialog, setOpenDialog] = useState(false);
-  const [jobPosition, setJobPosition] = useState();
-  const [jobDesc, setJobDesc] = useState();
-  const [jobExp, setJobExp] = useState();
+  const [jobPosition, setJobPosition] = useState("");
+  const [jobDesc, setJobDesc] = useState("");
+  const [jobExp, setJobExp] = useState("");
   const [loading, setLoading] = useState(false);
-  const onSubmit = async (e) => {
-    setLoading(true);
-    e.preventDefault();
-    console.log(jobPosition, jobDesc, jobExp);
-    const questionCount = process.env.NEXT_PUBLIC_INTERVIEW_QUESTION_COUNT;
+  const { user } = useUser();
 
-    const InputPrompt =
-      "Job Position: " +
-      jobPosition +
-      ", Job Description: " +
-      jobDesc +
-      ",Years of Experience: " +
-      jobExp +
-      ", Depends on this information please give me " +
-      questionCount +
-      " Interview question with Answered in Json Format, Give Question and Answered as field in JSON";
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    if (!jobPosition || !jobDesc || !jobExp) {
+      alert("Please fill out all fields.");
+      return;
+    }
+
+    if (!user?.primaryEmailAddress?.emailAddress) {
+      alert("User email not available. Please sign in properly.");
+      return;
+    }
+
+    setLoading(true);
+
+    const questionCount = process.env.NEXT_PUBLIC_INTERVIEW_QUESTION_COUNT || 5;
+    const InputPrompt = `Job Position: ${jobPosition}, Job Description: ${jobDesc}, Years of Experience: ${jobExp}. Based on this information, please generate ${questionCount} interview questions with answers in JSON format.`;
 
     try {
       const result = await chatSession.sendMessage(InputPrompt);
-      const textResponse = await result.response
-        .text()
+      const textResponse = await result.response.text();
+      const formattedResponse = textResponse
         .replace("```json", "")
         .replace("```", "");
-      console.log(JSON.parse(textResponse));
-      setLoading(false);
+
+      // Parse to validate it's proper JSON before storing
+      JSON.parse(formattedResponse);
+
+      await db.insert(MockInterview).values({
+        mockId: uuidv4(),
+        jsonMockResp: formattedResponse,
+        jobPosition,
+        jobDesc,
+        jobExp,
+        createdBy: user.primaryEmailAddress.emailAddress,
+        createdAt: moment().format("DD-MM-YYYY"),
+      });
     } catch (error) {
-      console.error("Error fetching interview questions:", error);
+      console.error("Error:", error);
+      alert("An error occurred. Please try again.");
+    } finally {
+      setLoading(false);
+      setOpenDialog(false);
     }
   };
 
   return (
     <div>
       <div
-        className="p-10 border round-lg bg-secondary
-       hover:scale-105 hover:shadow-md cursor-pointer 
-       transition-all"
+        className="p-10 border round-lg bg-secondary hover:scale-105 hover:shadow-md cursor-pointer transition-all"
         onClick={() => setOpenDialog(true)}
       >
         <h2 className="text-lg text-center">+ Add New</h2>
       </div>
-      <Dialog open={openDialog}>
+      <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="font-bold text-2xl">
-              Tell us more about your job interviewing
+              Tell us more about your job interview
             </DialogTitle>
             <DialogDescription>
               <form onSubmit={onSubmit}>
                 <div>
-                  <h2>Add details about your job position/role, Job description and years of experience</h2>
+                  <h2>
+                    {" "}
+                    Add details about the job position, description, and years
+                    of experience
+                  </h2>
                   <div className="mt-7 my-3">
                     <label>Job Role/Job Position</label>
                     <Input
                       placeholder="Ex. Full Stack Developer"
                       required
+                      value={jobPosition}
                       onChange={(event) => setJobPosition(event.target.value)}
                     />
                   </div>
                   <div className="mt-7 my-3">
-                    <label>Job Description/Tech Stack(In short)</label>
+                    <label>Job Description/Tech Stack (In short)</label>
                     <Textarea
-                      placeholder="Ex. React, Angular, NodeJs, MySQL etc."
+                      placeholder="Ex. React, Angular, NodeJs, MySQL, etc."
                       required
+                      value={jobDesc}
                       onChange={(event) => setJobDesc(event.target.value)}
                     />
                   </div>
                   <div className="mt-7 my-3">
                     <label>Years of Experience</label>
                     <Input
-                      placeholder="Ex.5"
+                      placeholder="Ex. 5"
                       type="number"
                       max={100}
                       required
+                      value={jobExp}
                       onChange={(event) => setJobExp(event.target.value)}
                     />
                   </div>
@@ -112,11 +139,11 @@ function AddNewInterview() {
                   >
                     {loading ? (
                       <>
-                        <LoaderCircle className="animate-spin"/>
+                        <LoaderCircle className="animate-spin" />
                         Generating from AI
                       </>
                     ) : (
-                      'Start Interview'
+                      "Start Interview"
                     )}
                   </Button>
                 </div>
