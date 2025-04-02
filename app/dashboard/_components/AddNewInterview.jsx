@@ -18,6 +18,7 @@ import { MockInterview } from "@/utils/schema";
 import { v4 as uuidv4 } from "uuid";
 import { useUser } from "@clerk/nextjs";
 import moment from "moment";
+import { useRouter } from "next/navigation";
 
 function AddNewInterview() {
   const [openDialog, setOpenDialog] = useState(false);
@@ -26,6 +27,7 @@ function AddNewInterview() {
   const [jobExp, setJobExp] = useState("");
   const [loading, setLoading] = useState(false);
   const { user } = useUser();
+  const router=useRouter();
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -52,9 +54,9 @@ function AddNewInterview() {
         .replace("```", "");
 
       // Parse to validate it's proper JSON before storing
-      JSON.parse(formattedResponse);
+      console.log(JSON.parse(formattedResponse));
 
-      await db.insert(MockInterview).values({
+      const resp=await db.insert(MockInterview).values({
         mockId: uuidv4(),
         jsonMockResp: formattedResponse,
         jobPosition,
@@ -63,12 +65,15 @@ function AddNewInterview() {
         createdBy: user.primaryEmailAddress.emailAddress,
         createdAt: moment().format("DD-MM-YYYY"),
       });
+      console.log("Inserted ID:",resp);
     } catch (error) {
       console.error("Error:", error);
       alert("An error occurred. Please try again.");
     } finally {
       setLoading(false);
       setOpenDialog(false);
+      //router.push('/dashboard/interview/',resp[0]?.mockId);
+      
     }
   };
 
@@ -92,8 +97,7 @@ function AddNewInterview() {
                   <h2>
                     {" "}
                     Add details about the job position, description, and years
-                    of experience
-                  </h2>
+                    of experience </h2>
                   <div className="mt-7 my-3">
                     <label>Job Role/Job Position</label>
                     <Input
