@@ -4,12 +4,13 @@ import { db } from "@/utils/db";
 import { MockInterview } from "@/utils/schema";
 import { eq } from "drizzle-orm";
 import { Lightbulb, WebcamIcon } from "lucide-react";
+import Link from "next/link";
 import React, { useEffect, useState, use } from "react";
 import Webcam from "react-webcam";
 
 function Interview({ params }) {
-  const unwrappedParams = use(params); // ✅ Correctly unwrapping the Promise
-  const interviewId = unwrappedParams?.interviewId; // Ensure it's defined before use
+  const unwrappedParams = use(params);
+  const interviewId = unwrappedParams?.interviewId;
 
   const [interviewDetails, setInterviewDetails] = useState(null);
   const [webCamEnabled, setWebCamEnabled] = useState(false);
@@ -18,7 +19,7 @@ function Interview({ params }) {
     if (interviewId) {
       GetInterviewDetails();
     }
-  }, [interviewId]); // ✅ Ensures function runs only when interviewId is available
+  }, [interviewId]);
 
   const GetInterviewDetails = async () => {
     try {
@@ -84,8 +85,7 @@ function Interview({ params }) {
             <>
               <WebcamIcon className="h-72 w-full my-7 p-20 bg-secondary rounded-lg border" />
               <Button
-
-              variant="ghost"
+                variant="ghost"
                 className="bg-[#0A717C] text-white w-full"
                 onClick={() => setWebCamEnabled(true)}
               >
@@ -95,7 +95,13 @@ function Interview({ params }) {
           )}
         </div>
         <div className="flex justify-end items-end ">
-          <Button className="bg-[#0A717C]">Start Interview</Button>
+          <Link
+            href={
+              "/dashboard/interview/" + unwrappedParams.interviewId + "/start"
+            }
+          >
+            <Button className="bg-[#0A717C]">Start Interview</Button>
+          </Link>
         </div>
       </div>
     </div>
