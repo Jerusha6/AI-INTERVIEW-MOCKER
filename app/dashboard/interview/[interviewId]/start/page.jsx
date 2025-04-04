@@ -30,13 +30,21 @@ function StartInterview({ params }) {
     }
   };
 
-  return <div>
-    <div className="grid grid-cols- md:grid-cols-2 gap-10">
-
-<QuestionSection mockInterviewQuestion={mockInterviewQuestion} activeQuestionIndex={activeQuestionIndex}/>
-<RecordAnswerSection/>
+  return (
+    <div>
+      <div className="grid grid-cols- md:grid-cols-2 gap-10">
+        <QuestionSection
+          mockInterviewQuestion={mockInterviewQuestion}
+          activeQuestionIndex={activeQuestionIndex}
+        />
+        <RecordAnswerSection
+          mockInterviewQuestion={mockInterviewQuestion}
+          activeQuestionIndex={activeQuestionIndex}
+          interviewData={interviewData}
+        />
+      </div>
     </div>
-  </div>;
+  );
 }
 
 export default StartInterview;
