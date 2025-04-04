@@ -2,12 +2,20 @@
 import { Button } from "@/components/ui/button";
 import { Mic } from "lucide-react";
 import Image from "next/image";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import useSpeechToText from "react-hook-speech-to-text";
-import Webcam from "react-webcam";
+import dynamic from "next/dynamic";
+
+// Dynamically import Webcam to avoid SSR issues
+const Webcam = dynamic(() => import("react-webcam"), { ssr: false });
 
 function RecordAnswerSection() {
   const [userAnswer, setUserAnswer] = useState("");
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const {
     error,
@@ -37,14 +45,16 @@ function RecordAnswerSection() {
           alt="webcam"
           className="absolute"
         />
-        <Webcam
-          mirrored={true}
-          style={{
-            height: 300,
-            width: "100%",
-            zIndex: 10,
-          }}
-        />
+        {isClient && ( // Render Webcam only on the client
+          <Webcam
+            mirrored={true}
+            style={{
+              height: 300,
+              width: "100%",
+              zIndex: 10,
+            }}
+          />
+        )}
       </div>
       <Button
         variant="outline"
