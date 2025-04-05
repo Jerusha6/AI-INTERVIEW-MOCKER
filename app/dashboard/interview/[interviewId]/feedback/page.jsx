@@ -10,23 +10,29 @@ import {
 } from "@/components/ui/collapsible";
 import { ChevronsUpDown } from "lucide-react";
 import { Button } from "@/@/components/ui/button";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 
-function Feedback({params}) {
+function Feedback() {
+  // Removed params from props
   const [feedbackList, setFeedbackList] = useState([]);
-  const router=useRouter();
+  const router = useRouter();
+  const params = useParams(); // Get params using useParams hook
+  const interviewId = params.interviewId; // Extract interviewId from params
+
   useEffect(() => {
     GetFeedback();
-  }, []);
+  }, [interviewId]); // Add interviewId as dependency
+
   const GetFeedback = async () => {
     const result = await db
       .select()
       .from(UserAnswer)
-      .where(eq(UserAnswer.mockIdRef, params.interviewId))
+      .where(eq(UserAnswer.mockIdRef, interviewId)) // Use the extracted interviewId
       .orderBy(UserAnswer.id);
     console.log(result);
     setFeedbackList(result);
   };
+
   return (
     <div className="p-10">
       <h2 className="text-3xl font-black text-green-500">Congratulations</h2>
@@ -68,7 +74,12 @@ function Feedback({params}) {
             </CollapsibleContent>
           </Collapsible>
         ))}
-      <Button onClick={()=>router.replace('/dashboard')} className="bg-[#0A717C] ">Go home</Button>
+      <Button
+        onClick={() => router.replace("/dashboard")}
+        className="bg-[#0A717C]"
+      >
+        Go home
+      </Button>
     </div>
   );
 }

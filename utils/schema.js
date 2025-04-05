@@ -11,6 +11,8 @@ export const MockInterview = pgTable("mockInterview", {
   createdAt: varchar("createdAt").notNull().default("CURRENT_TIMESTAMP"),
 });
 
+// 2.46.11
+
 export const UserAnswer = pgTable("userAnswer", {
   id: serial("id").primaryKey(),
   mockIdRef: varchar("mockId").notNull(),

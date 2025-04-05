@@ -54,29 +54,35 @@ function AddNewInterview() {
         .replace("```", "");
 
       // Parse to validate it's proper JSON before storing
-      console.log(JSON.parse(formattedResponse));
+      JSON.parse(formattedResponse);
 
-      const resp = await db.insert(MockInterview).values({
-        mockId: uuidv4(),
-        jsonMockResp: formattedResponse,
-        jobPosition,
-        jobDesc,
-        jobExp,
-        createdBy: user.primaryEmailAddress.emailAddress,
-        createdAt: moment().format("DD-MM-YYYY"),
-      });
-      console.log("Inserted ID:", resp);
+      // Insert into database and get the inserted record
+      const insertedRecord = await db
+        .insert(MockInterview)
+        .values({
+          mockId: uuidv4(),
+          jsonMockResp: formattedResponse,
+          jobPosition,
+          jobDesc,
+          jobExp,
+          createdBy: user.primaryEmailAddress.emailAddress,
+          createdAt: moment().format("DD-MM-YYYY"),
+        })
+        .returning(); // Add .returning() to get the inserted record
+
+      console.log("Inserted record:", insertedRecord);
+
+      if (insertedRecord && insertedRecord[0]?.mockId) {
+        router.push("/dashboard/interview/" + insertedRecord[0].mockId);
+      } else {
+        throw new Error("Could not fetch interview ID after insertion");
+      }
     } catch (error) {
       console.error("Error:", error);
       alert("An error occurred. Please try again.");
     } finally {
       setLoading(false);
       setOpenDialog(false);
-      if (resp && resp[0]?.mockId) {
-        router.push("/dashboard/interview/" + resp[0].mockId);
-      } else {
-        alert("Unexpected error occurred. Could not fetch interview ID.");
-      }
     }
   };
 
