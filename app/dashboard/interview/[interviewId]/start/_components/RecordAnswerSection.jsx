@@ -1,18 +1,16 @@
 "use client";
 import { Button } from "@/components/ui/button";
-import { Mic } from "lucide-react";
 import Image from "next/image";
 import React, { useEffect, useState, useCallback } from "react";
+import  Webcam  from "react-webcam";
 import useSpeechToText from "react-hook-speech-to-text";
-import dynamic from "next/dynamic";
+import { Mic } from "lucide-react";
 import { toast } from "sonner";
 import { chatSession } from "@/utils/GeminiAIModel";
+import { db } from "@/utils/db";
 import { UserAnswer } from "@/utils/schema";
 import { useUser } from "@clerk/nextjs";
-import { db } from "@/utils/db";
 import moment from "moment";
-
-const Webcam = dynamic(() => import("react-webcam"), { ssr: false });
 
 function RecordAnswerSection({
   mockInterviewQuestion,
@@ -37,14 +35,14 @@ function RecordAnswerSection({
 
   // Handle speech recognition results
   useEffect(() => {
-    if (results.length > 0) {
+    if (results && results.length > 0) {
       setUserAnswer(results.map((result) => result.transcript).join(" "));
     }
   }, [results]);
 
   // Handle recording stop and answer submission
   useEffect(() => {
-    if (!isRecording && userAnswer.length > 10 && !isProcessing) {
+    if (!isRecording && userAnswer && userAnswer.length > 10 && !isProcessing) {
       handleAnswerSubmission();
     }
   }, [isRecording, userAnswer, isProcessing]);
@@ -63,8 +61,13 @@ function RecordAnswerSection({
     setLoading(true);
 
     try {
-      const currentQuestion = mockInterviewQuestion[activeQuestionIndex];
-      const feedBackPrompt = `Question: ${currentQuestion?.question}, 
+      const currentQuestion =
+        mockInterviewQuestion && mockInterviewQuestion[activeQuestionIndex];
+      if (!currentQuestion) {
+        throw new Error("No question found");
+      }
+
+      const feedBackPrompt = `Question: ${currentQuestion.question}, 
         User Answer: ${userAnswer}
         Please provide a rating and feedback for this answer in JSON format with 'rating' and 'feedback' fields.`;
 
@@ -80,13 +83,17 @@ function RecordAnswerSection({
         feedbackResp = { rating: 0, feedback: "Could not parse feedback" };
       }
 
+      if (!interviewData?.mockId) {
+        throw new Error("Missing interview data");
+      }
+
       await db.insert(UserAnswer).values({
-        mockIdRef: interviewData?.mockId,
-        question: currentQuestion?.question,
-        correctAns: currentQuestion?.answer,
+        mockIdRef: interviewData.mockId,
+        question: currentQuestion.question,
+        correctAns: currentQuestion.answer,
         userAns: userAnswer,
-        feedback: feedbackResp?.feedback || "No feedback provided",
-        rating: feedbackResp?.rating || 0,
+        feedback: feedbackResp.feedback || "No feedback provided",
+        rating: feedbackResp.rating || 0,
         userEmail: user?.primaryEmailAddress?.emailAddress,
         createdBy: moment().format("DD-MM-YYYY"),
       });
@@ -106,9 +113,10 @@ function RecordAnswerSection({
     interviewData,
     user,
     mockInterviewQuestion,
+    isProcessing,
   ]);
 
-  const toggleRecording = () => {
+  const toggleRecording = useCallback(() => {
     if (isProcessing) return;
 
     if (isRecording) {
@@ -117,7 +125,9 @@ function RecordAnswerSection({
       setUserAnswer("");
       startSpeechToText();
     }
-  };
+  }, [isProcessing, isRecording, startSpeechToText, stopSpeechToText]);
+
+  if (!isClient) return null;
 
   return (
     <div className="flex items-center justify-center flex-col">
@@ -130,16 +140,14 @@ function RecordAnswerSection({
           className="absolute"
           priority
         />
-        {isClient && (
-          <Webcam
-            mirrored={true}
-            style={{
-              height: 300,
-              width: "100%",
-              zIndex: 10,
-            }}
-          />
-        )}
+        <Webcam
+          mirrored={true}
+          style={{
+            height: 300,
+            width: "100%",
+            zIndex: 10,
+          }}
+        />
       </div>
 
       <Button
