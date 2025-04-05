@@ -2,9 +2,9 @@
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import React, { useEffect, useState, useCallback } from "react";
-import  Webcam  from "react-webcam";
+import Webcam from "react-webcam";
 import useSpeechToText from "react-hook-speech-to-text";
-import { Mic } from "lucide-react";
+import { Mic, StopCircle } from "lucide-react";
 import { toast } from "sonner";
 import { chatSession } from "@/utils/GeminiAIModel";
 import { db } from "@/utils/db";
@@ -27,11 +27,17 @@ function RecordAnswerSection({
     setIsClient(true);
   }, []);
 
-  const { error, isRecording, results, startSpeechToText, stopSpeechToText } =
-    useSpeechToText({
-      continuous: true,
-      useLegacyResults: false,
-    });
+  const {
+    error,
+    isRecording,
+    results,
+    startSpeechToText,
+    setResults,
+    stopSpeechToText,
+  } = useSpeechToText({
+    continuous: false,
+    useLegacyResults: false,
+  });
 
   // Handle speech recognition results
   useEffect(() => {
@@ -99,9 +105,11 @@ function RecordAnswerSection({
       });
 
       toast.success("Your answer has been recorded successfully");
+      setUserAnswer("");
+      setResults([]);
     } catch (err) {
       console.error("Submission error:", err);
-      toast.error("Failed to process your answer");
+      toast.error("Failed to process your answer, Please try again");
     } finally {
       setUserAnswer("");
       setLoading(false);
@@ -158,11 +166,14 @@ function RecordAnswerSection({
       >
         {isRecording ? (
           <span className="text-red-600 flex gap-2">
-            <Mic className="animate-pulse" />
+            <StopCircle className="animate-pulse" />
             Stop Recording
           </span>
         ) : (
-          "Record Answer"
+          <span className="flex gap-2">
+            <Mic />
+            Record Answer
+          </span>
         )}
       </Button>
 
