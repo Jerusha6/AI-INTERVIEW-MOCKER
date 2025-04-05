@@ -2,7 +2,7 @@
 import { Button } from "@/components/ui/button";
 import { Mic } from "lucide-react";
 import Image from "next/image";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import useSpeechToText from "react-hook-speech-to-text";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
@@ -12,7 +12,6 @@ import { useUser } from "@clerk/nextjs";
 import { db } from "@/utils/db";
 import moment from "moment";
 
-// Dynamically import Webcam to avoid SSR issues
 const Webcam = dynamic(() => import("react-webcam"), { ssr: false });
 
 function RecordAnswerSection({
@@ -24,34 +23,94 @@ function RecordAnswerSection({
   const [isClient, setIsClient] = useState(false);
   const { user } = useUser();
   const [loading, setLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  const {
-    error,
-    interimResult,
-    isRecording,
-    results,
-    startSpeechToText,
-    stopSpeechToText,
-  } = useSpeechToText({
-    continuous: true,
-    useLegacyResults: false,
-  });
+  const { error, isRecording, results, startSpeechToText, stopSpeechToText } =
+    useSpeechToText({
+      continuous: true,
+      useLegacyResults: false,
+    });
 
+  // Handle speech recognition results
   useEffect(() => {
-    results.map((result) =>
-      setUserAnswer((prevAns) => prevAns + result?.transcript)
-    );
-  }, [results]);
-  useEffect(() => {
-    if (!isRecording && userAnswer.length > 10) {
-      UpdatedUserAnswer();
+    if (results.length > 0) {
+      setUserAnswer(results.map((result) => result.transcript).join(" "));
     }
-  }, [userAnswer,isRecording]);
-  const StartStopRecording = async () => {
+  }, [results]);
+
+  // Handle recording stop and answer submission
+  useEffect(() => {
+    if (!isRecording && userAnswer.length > 10 && !isProcessing) {
+      handleAnswerSubmission();
+    }
+  }, [isRecording, userAnswer, isProcessing]);
+
+  // Handle speech recognition errors
+  useEffect(() => {
+    if (error) {
+      toast.error("Speech recognition error: " + error.message);
+    }
+  }, [error]);
+
+  const handleAnswerSubmission = useCallback(async () => {
+    if (!userAnswer || isProcessing) return;
+
+    setIsProcessing(true);
+    setLoading(true);
+
+    try {
+      const currentQuestion = mockInterviewQuestion[activeQuestionIndex];
+      const feedBackPrompt = `Question: ${currentQuestion?.question}, 
+        User Answer: ${userAnswer}
+        Please provide a rating and feedback for this answer in JSON format with 'rating' and 'feedback' fields.`;
+
+      const result = await chatSession.sendMessage(feedBackPrompt);
+      const responseText = result.response.text();
+      const cleanedResponse = responseText.replace(/```json|```/g, "");
+
+      let feedbackResp;
+      try {
+        feedbackResp = JSON.parse(cleanedResponse);
+      } catch (e) {
+        console.error("Failed to parse JSON response:", e);
+        feedbackResp = { rating: 0, feedback: "Could not parse feedback" };
+      }
+
+      await db.insert(UserAnswer).values({
+        mockIdRef: interviewData?.mockId,
+        question: currentQuestion?.question,
+        correctAns: currentQuestion?.answer,
+        userAns: userAnswer,
+        feedback: feedbackResp?.feedback || "No feedback provided",
+        rating: feedbackResp?.rating || 0,
+        userEmail: user?.primaryEmailAddress?.emailAddress,
+        createdBy: moment().format("DD-MM-YYYY"),
+      });
+
+      toast.success("Your answer has been recorded successfully");
+    } catch (err) {
+      console.error("Submission error:", err);
+      toast.error("Failed to process your answer");
+    } finally {
+      setUserAnswer("");
+      setLoading(false);
+      setIsProcessing(false);
+    }
+  }, [
+    userAnswer,
+    activeQuestionIndex,
+    interviewData,
+    user,
+    mockInterviewQuestion,
+  ]);
+
+  const toggleRecording = () => {
+    if (isProcessing) return;
+
     if (isRecording) {
       stopSpeechToText();
     } else {
@@ -60,54 +119,18 @@ function RecordAnswerSection({
     }
   };
 
-  const UpdatedUserAnswer = async () => {
-    console.log(userAnswer);
-    setLoading(true);
-    const feedBackPrompt =
-      "Question:" +
-      mockInterviewQuestion[activeQuestionIndex]?.question +
-      ", User Answer:" +
-      userAnswer +
-      "Depends on question and user answer for given interview question" +
-      "Kindly provide a rating for the answer and share any feedback or suggestions for improvement, if any" +
-      "in just 3 to 5 lines to improve it in JSON format with rating field and feedback field";
-
-    const result = await chatSession.sendMessage(feedBackPrompt);
-    const mockJsonResp = result.response
-      .text()
-      .replace("```json", "")
-      .replace("```", "");
-    console.log(mockJsonResp);
-    const JsonFeedbackResp = JSON.parse(mockJsonResp);
-
-    const resp = await db.insert(UserAnswer).values({
-      mockIdRef: interviewData?.mockId,
-      question: mockInterviewQuestion[activeQuestionIndex]?.question,
-      correctAns: mockInterviewQuestion[activeQuestionIndex]?.answer,
-      userAns: userAnswer,
-      feedback: JsonFeedbackResp?.feedback,
-      rating: JsonFeedbackResp?.rating,
-      userEmail: user?.primaryEmailAddress?.emailAddress,
-      createdBy: moment().format("DD-MM-YYYY"),
-    });
-    if (resp) {
-      toast("User Answer recorded successfully");
-    }
-    setUserAnswer("");
-    setLoading(false);
-  };
-
   return (
     <div className="flex items-center justify-center flex-col">
-      <div className="flex flex-col mt-20 justify-center items-center bg-black rounded-lg p-5">
+      <div className="flex flex-col mt-20 justify-center items-center bg-black rounded-lg p-5 relative">
         <Image
-          src={"/webcam.png"}
+          src="/webcam.png"
           width={200}
           height={200}
-          alt="webcam"
+          alt="webcam placeholder"
           className="absolute"
+          priority
         />
-        {isClient && ( // Render Webcam only on the client
+        {isClient && (
           <Webcam
             mirrored={true}
             style={{
@@ -118,21 +141,28 @@ function RecordAnswerSection({
           />
         )}
       </div>
+
       <Button
-        disabled={loading}
+        disabled={loading || isProcessing}
         variant="outline"
-        className="my-10 "
-        onClick={StartStopRecording}
+        className="my-10"
+        onClick={toggleRecording}
       >
         {isRecording ? (
-          <h2 className="text-red-600 flex gap-2">
-            <Mic />
+          <span className="text-red-600 flex gap-2">
+            <Mic className="animate-pulse" />
             Stop Recording
-          </h2>
+          </span>
         ) : (
           "Record Answer"
         )}
       </Button>
+
+      {(loading || isProcessing) && (
+        <p className="text-sm text-muted-foreground">
+          Processing your answer...
+        </p>
+      )}
     </div>
   );
 }
