@@ -50,11 +50,12 @@ function RecordAnswerSection({
     if (!isRecording && userAnswer.length > 10) {
       UpdatedUserAnswer();
     }
-  }, [userAnswer]);
+  }, [userAnswer,isRecording]);
   const StartStopRecording = async () => {
     if (isRecording) {
       stopSpeechToText();
     } else {
+      setUserAnswer("");
       startSpeechToText();
     }
   };
@@ -131,12 +132,6 @@ function RecordAnswerSection({
         ) : (
           "Record Answer"
         )}
-      </Button>
-      <Button
-        className="bg-[#0A717C] text-white"
-        onClick={() => console.log(userAnswer)}
-      >
-        Show User Answer
       </Button>
     </div>
   );
