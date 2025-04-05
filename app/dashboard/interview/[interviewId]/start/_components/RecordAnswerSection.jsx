@@ -102,8 +102,8 @@ function RecordAnswerSection({
         userAns: userAnswer,
         feedback: feedbackResp.feedback || "No feedback provided",
         rating: feedbackResp.rating || 0,
-        userEmail: user?.primaryEmailAddress?.emailAddress,
-        createdBy: moment().format("DD-MM-YYYY"),
+        userEmail: user?.primaryEmailAddress?.emailAddress||"no-email",
+        createdAt: moment().format("DD-MM-YYYY"),
       });
 
       toast.success("Your answer has been recorded successfully");
