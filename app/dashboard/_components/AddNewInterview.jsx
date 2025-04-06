@@ -44,48 +44,74 @@ function AddNewInterview() {
     setLoading(true);
 
     const questionCount = process.env.NEXT_PUBLIC_INTERVIEW_QUESTION_COUNT || 5;
-    const InputPrompt = `Job Position: ${jobPosition}, Job Description: ${jobDesc}, Years of Experience: ${jobExp}. Based on this information, please generate ${questionCount} interview questions with answers in JSON format.`;
+    const InputPrompt = `Job Position: ${jobPosition}, Job Description: ${jobDesc}, Years of Experience: ${jobExp}. Based on this information, please generate ${questionCount} interview questions with answers in valid JSON format. Only return the JSON object, without any markdown formatting or additional text.`;
 
     try {
       const result = await chatSession.sendMessage(InputPrompt);
       const textResponse = await result.response.text();
-      const formattedResponse = textResponse
-        .replace("```json", "")
-        .replace("```", "");
 
-      // Parse to validate it's proper JSON before storing
-      JSON.parse(formattedResponse);
+      // More robust response cleaning
+      let cleanedResponse = textResponse.trim();
 
-      // Insert into database and get the inserted record
+      // Remove markdown code blocks if present
+      if (cleanedResponse.startsWith("```json")) {
+        cleanedResponse = cleanedResponse.substring(7);
+      }
+      if (cleanedResponse.startsWith("```")) {
+        cleanedResponse = cleanedResponse.substring(3);
+      }
+      if (cleanedResponse.endsWith("```")) {
+        cleanedResponse = cleanedResponse.substring(
+          0,
+          cleanedResponse.length - 3
+        );
+      }
+
+      cleanedResponse = cleanedResponse.trim();
+
+      // Parse to validate JSON
+      const parsedResponse = JSON.parse(cleanedResponse);
+
+      // Validate the response structure
+      if (
+        !Array.isArray(parsedResponse) &&
+        typeof parsedResponse !== "object"
+      ) {
+        throw new Error("Invalid response format from AI");
+      }
+
+      // Insert into database
       const insertedRecord = await db
         .insert(MockInterview)
         .values({
           mockId: uuidv4(),
-          jsonMockResp: formattedResponse,
+          jsonMockResp: JSON.stringify(parsedResponse), // Store stringified JSON
           jobPosition,
           jobDesc,
           jobExp,
           createdBy: user.primaryEmailAddress.emailAddress,
           createdAt: moment().format("DD-MM-YYYY"),
         })
-        .returning(); // Add .returning() to get the inserted record
+        .returning();
 
-      console.log("Inserted record:", insertedRecord);
-
-      if (insertedRecord && insertedRecord[0]?.mockId) {
-        router.push("/dashboard/interview/" + insertedRecord[0].mockId);
-      } else {
-        throw new Error("Could not fetch interview ID after insertion");
+      if (!insertedRecord || !insertedRecord[0]?.mockId) {
+        throw new Error("Failed to insert record into database");
       }
+
+      router.push("/dashboard/interview/" + insertedRecord[0].mockId);
     } catch (error) {
-      console.error("Error:", error);
-      alert("An error occurred. Please try again.");
+      console.error("Detailed Error:", {
+        error: error.message,
+        stack: error.stack,
+      });
+      alert(
+        `Error: ${error.message}. Please check the console for more details.`
+      );
     } finally {
       setLoading(false);
       setOpenDialog(false);
     }
   };
-
   return (
     <div>
       <div
