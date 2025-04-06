@@ -12,8 +12,6 @@ import { UserAnswer } from "@/utils/schema";
 import { useUser } from "@clerk/nextjs";
 import moment from "moment";
 
-// 2.45.50
-
 function RecordAnswerSection({
   mockInterviewQuestion,
   activeQuestionIndex,
@@ -24,6 +22,10 @@ function RecordAnswerSection({
   const { user } = useUser();
   const [loading, setLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [recordingTimer, setRecordingTimer] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [serviceAvailable, setServiceAvailable] = useState(true);
+  const TIME_LIMIT = 60; // 60 seconds time limit
 
   useEffect(() => {
     setIsClient(true);
@@ -62,6 +64,42 @@ function RecordAnswerSection({
     }
   }, [error]);
 
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingTimer) {
+        clearInterval(recordingTimer);
+      }
+    };
+  }, [recordingTimer]);
+
+  const startTimer = useCallback(() => {
+    setTimeLeft(TIME_LIMIT);
+
+    const timer = setInterval(() => {
+      setTimeLeft((prevTime) => {
+        if (prevTime <= 1) {
+          clearInterval(timer);
+          if (isRecording) {
+            stopRecording();
+          }
+          return 0;
+        }
+        return prevTime - 1;
+      });
+    }, 1000);
+
+    setRecordingTimer(timer);
+  }, [isRecording]);
+
+  const stopRecording = useCallback(() => {
+    if (recordingTimer) {
+      clearInterval(recordingTimer);
+      setRecordingTimer(null);
+    }
+    stopSpeechToText();
+  }, [recordingTimer, stopSpeechToText]);
+
   const handleAnswerSubmission = useCallback(async () => {
     if (!userAnswer || isProcessing) return;
 
@@ -79,16 +117,27 @@ function RecordAnswerSection({
         User Answer: ${userAnswer}
         Please provide a rating and feedback for this answer in JSON format with 'rating' and 'feedback' fields.`;
 
-      const result = await chatSession.sendMessage(feedBackPrompt);
-      const responseText = result.response.text();
-      const cleanedResponse = responseText.replace(/```json|```/g, "");
+      let feedbackResp = {
+        rating: 0,
+        feedback: "Feedback service unavailable",
+      };
 
-      let feedbackResp;
       try {
+        const result = await chatSession.sendMessage(feedBackPrompt);
+        const responseText = result.response.text();
+        const cleanedResponse = responseText.replace(/```json|```/g, "");
         feedbackResp = JSON.parse(cleanedResponse);
-      } catch (e) {
-        console.error("Failed to parse JSON response:", e);
-        feedbackResp = { rating: 0, feedback: "Could not parse feedback" };
+        setServiceAvailable(true);
+      } catch (err) {
+        console.error("API Error:", err);
+        if (err.message.includes("quota") || err.message.includes("429")) {
+          setServiceAvailable(false);
+          toast.error(
+            "Our feedback service is currently at capacity. Your answer has been saved, but feedback will be added later."
+          );
+        } else {
+          throw err;
+        }
       }
 
       if (!interviewData?.mockId) {
@@ -100,22 +149,21 @@ function RecordAnswerSection({
         question: currentQuestion.question,
         correctAns: currentQuestion.answer,
         userAns: userAnswer,
-        feedback: feedbackResp.feedback || "No feedback provided",
-        rating: feedbackResp.rating || 0,
-        userEmail: user?.primaryEmailAddress?.emailAddress||"no-email",
+        feedback: feedbackResp.feedback,
+        rating: feedbackResp.rating,
+        userEmail: user?.primaryEmailAddress?.emailAddress || "no-email",
         createdAt: moment().format("DD-MM-YYYY"),
       });
 
       toast.success("Your answer has been recorded successfully");
-      setUserAnswer("");
-      setResults([]);
     } catch (err) {
       console.error("Submission error:", err);
-      toast.error("Failed to process your answer, Please try again");
+      toast.error("Failed to process your answer. Please try again later.");
     } finally {
       setUserAnswer("");
       setLoading(false);
       setIsProcessing(false);
+      setTimeLeft(0);
     }
   }, [
     userAnswer,
@@ -130,12 +178,13 @@ function RecordAnswerSection({
     if (isProcessing) return;
 
     if (isRecording) {
-      stopSpeechToText();
+      stopRecording();
     } else {
       setUserAnswer("");
       startSpeechToText();
+      startTimer();
     }
-  }, [isProcessing, isRecording, startSpeechToText, stopSpeechToText]);
+  }, [isProcessing, isRecording, startSpeechToText, stopRecording, startTimer]);
 
   if (!isClient) return null;
 
@@ -161,7 +210,7 @@ function RecordAnswerSection({
       </div>
 
       <Button
-        disabled={loading || isProcessing}
+        disabled={loading || isProcessing || !serviceAvailable}
         variant="outline"
         className="my-10"
         onClick={toggleRecording}
@@ -169,15 +218,21 @@ function RecordAnswerSection({
         {isRecording ? (
           <span className="text-red-600 flex gap-2">
             <StopCircle className="animate-pulse" />
-            Stop Recording
+            Stop Recording ({timeLeft}s)
           </span>
         ) : (
           <span className="flex gap-2">
             <Mic />
-            Record Answer
+            Record Answer ({TIME_LIMIT}s limit)
           </span>
         )}
       </Button>
+
+      {!serviceAvailable && (
+        <p className="text-sm text-yellow-600 mt-2">
+          Note: Feedback generation is temporarily unavailable
+        </p>
+      )}
 
       {(loading || isProcessing) && (
         <p className="text-sm text-muted-foreground">
