@@ -1,8 +1,8 @@
 "use client";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
-import React, { useEffect, useState, useCallback } from "react";
-import Webcam from "react-webcam"; 
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import Webcam from "react-webcam";
 import useSpeechToText from "react-hook-speech-to-text";
 import { Mic } from "lucide-react";
 import { toast } from "sonner";
@@ -21,13 +21,20 @@ function RecordAnswerSection({
   const [isClient, setIsClient] = useState(false);
   const { user } = useUser();
   const [loading, setLoading] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [timer, setTimer] = useState(60);
+  const timerRef = useRef(null);
 
   useEffect(() => {
     setIsClient(true);
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
   }, []);
 
-  const { error, isRecording, results, startSpeechToText, stopSpeechToText } =
+  const { error, results, startSpeechToText, stopSpeechToText } =
     useSpeechToText({
       continuous: true,
       useLegacyResults: false,
@@ -40,33 +47,43 @@ function RecordAnswerSection({
   }, [results]);
 
   useEffect(() => {
-    if (!isRecording && userAnswer && userAnswer.length > 10 && !isProcessing) {
-      handleAnswerSubmission();
-    }
-  }, [isRecording, userAnswer, isProcessing]);
-
-  useEffect(() => {
     if (error) {
-      toast.error("Speech recognition error: " + error.message);
+      console.error("Speech recognition error:", error);
     }
   }, [error]);
 
-  const handleAnswerSubmission = useCallback(async () => {
-    if (!userAnswer || isProcessing) return;
+  const startTimer = () => {
+    setTimer(60);
+    timerRef.current = setInterval(() => {
+      setTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current);
+          stopRecording();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
 
-    setIsProcessing(true);
+  const stopRecording = () => {
+    stopSpeechToText();
+    setIsRecording(false);
+    clearInterval(timerRef.current);
+  };
+
+  const handleAnswerSubmission = async () => {
+    if (!userAnswer) return;
+
     setLoading(true);
 
     try {
-      const currentQuestion =
-        mockInterviewQuestion && mockInterviewQuestion[activeQuestionIndex];
-      if (!currentQuestion) {
-        throw new Error("No question found");
-      }
+      const currentQuestion = mockInterviewQuestion[activeQuestionIndex];
+      if (!currentQuestion) return;
 
       const feedBackPrompt = `Question: ${currentQuestion.question}, 
         User Answer: ${userAnswer}
-        Please provide a rating and feedback for this answer in JSON format with 'rating' and 'feedback' fields.`;
+        Provide a rating and feedback in JSON with 'rating' and 'feedback' fields.`;
 
       const result = await chatSession.sendMessage(feedBackPrompt);
       const responseText = result.response.text();
@@ -76,12 +93,7 @@ function RecordAnswerSection({
       try {
         feedbackResp = JSON.parse(cleanedResponse);
       } catch (e) {
-        console.error("Failed to parse JSON response:", e);
         feedbackResp = { rating: 0, feedback: "Could not parse feedback" };
-      }
-
-      if (!interviewData?.mockId) {
-        throw new Error("Missing interview data");
       }
 
       await db.insert(UserAnswer).values({
@@ -89,40 +101,36 @@ function RecordAnswerSection({
         question: currentQuestion.question,
         correctAns: currentQuestion.answer,
         userAns: userAnswer,
-        feedback: feedbackResp.feedback || "No feedback provided",
-        rating: feedbackResp.rating || 0,
-        userEmail: user?.primaryEmailAddress?.emailAddress,
-        createdBy: moment().format("DD-MM-YYYY"),
+        feedback: feedbackResp.feedback,
+        rating: feedbackResp.rating,
+        userEmail: user.primaryEmailAddress.emailAddress,
+        createdAt: moment().format("DD-MM-YYYY"),
       });
 
-      toast.success("Your answer has been recorded successfully");
+      toast.success("Answer recorded");
     } catch (err) {
-      console.error("Submission error:", err);
-      toast.error("Failed to process your answer");
+      console.error("Error:", err);
     } finally {
       setUserAnswer("");
       setLoading(false);
-      setIsProcessing(false);
     }
-  }, [
-    userAnswer,
-    activeQuestionIndex,
-    interviewData,
-    user,
-    mockInterviewQuestion,
-    isProcessing,
-  ]);
+  };
 
-  const toggleRecording = useCallback(() => {
-    if (isProcessing) return;
+  const toggleRecording = () => {
+    if (loading) return;
 
     if (isRecording) {
-      stopSpeechToText();
+      stopRecording();
+      if (userAnswer) {
+        handleAnswerSubmission();
+      }
     } else {
       setUserAnswer("");
       startSpeechToText();
+      setIsRecording(true);
+      startTimer();
     }
-  }, [isProcessing, isRecording, startSpeechToText, stopSpeechToText]);
+  };
 
   if (!isClient) return null;
 
@@ -147,8 +155,12 @@ function RecordAnswerSection({
         />
       </div>
 
+      {isRecording && (
+        <div className="my-4 text-lg font-medium">Time remaining: {timer}s</div>
+      )}
+
       <Button
-        disabled={loading || isProcessing}
+        disabled={loading}
         variant="outline"
         className="my-10"
         onClick={toggleRecording}
@@ -162,12 +174,6 @@ function RecordAnswerSection({
           "Record Answer"
         )}
       </Button>
-
-      {(loading || isProcessing) && (
-        <p className="text-sm text-muted-foreground">
-          Processing your answer...
-        </p>
-      )}
     </div>
   );
 }
